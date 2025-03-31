@@ -1,22 +1,25 @@
-let rows = 20;
-let cols = 20;
+let rows = 13;
+let cols = 13;
 let gridSize, cellSize, marginX, marginY;
 let players = [];
 let currentPlayer = 0;
 let diceRoll = 1;
 let rolling = false;
 let rollStartTime = 0;
-let rollDuration = 1000; // 骰子動畫持續 1 秒
+let rollDuration = 1000;
 let path = [];
-
-// 玩家移動動畫
 let moving = false;
 let moveSteps = 0;
 let moveIndex = 0;
-let stepDuration = 200; // 每格移動的時間，單位為毫秒
+let stepDuration = 200;
+let bgm;
+let bgmStarted = false;
+let bgImg;
 
-let showPosition = false; // 控制是否顯示位置
-let rollButton; // 擲骰按鈕
+function preload() {
+  bgm = loadSound('../sound_effects/game_bgm.mp3');
+  bgImg = loadImage('../images/background.jpg');
+}
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -26,29 +29,27 @@ function setup() {
   gridSize = min(width, height) * 0.8;
   cellSize = gridSize / max(rows, cols);
   
-  // 偏移量，將格子網格往右下方偏移
-  marginX = (width - gridSize) / 2 + 50;
-  marginY = (height - gridSize) / 2 + 50;
+  marginX = (width - gridSize) / 2;
+  marginY = (height - gridSize) / 2;
   
   calculatePath();
   
   for (let i = 0; i < 4; i++) {
-    players.push({ 
-      index: 0, 
-      color: color(random(100, 255), random(100, 255), random(100, 255)) 
+    players.push({
+      index: 0,
+      color: color(random(100, 255), random(100, 255), random(100, 255))
     });
   }
-
-  // 建立擲骰按鈕
-  rollButton = createButton('擲骰子');
-  rollButton.position(20, 60);
-  rollButton.mousePressed(rollDice);
+  
+  bgm.loop();
 }
 
 function draw() {
   background(255);
-  
-  // 繪製外圍格子
+  image(bgImg, 0, 0, width, height);
+  tint(255, 120);
+
+  // 畫格子
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
       let x = marginX + i * cellSize;
@@ -58,28 +59,28 @@ function draw() {
         fill(0, 0, 0, 255);
         rect(x, y, cellSize, cellSize);
       }
-      
-      // 高亮顯示當前玩家所在格子
-      if (showPosition) {
+
+      // 修改顯示條件：只要不是在骰骰子，就顯示當前玩家位置
+      if (!rolling) {
         let currentPlayerPos = path[players[currentPlayer].index];
         if (abs(x - currentPlayerPos.x) < 1 && abs(y - currentPlayerPos.y) < 1) {
-          fill(255, 0, 0, 150); // 紅色半透明
+          fill(255, 0, 0, 150);
           rect(currentPlayerPos.x, currentPlayerPos.y, cellSize, cellSize);
         }
       }
     }
   }
-  
-  // 繪製玩家
+
+  // 畫玩家
   for (let i = 0; i < players.length; i++) {
     let { index, color } = players[i];
     let pos = path[index];
-
+    
     fill(color);
     ellipse(pos.x, pos.y, cellSize * 0.6);
   }
 
-  // 處理移動動畫
+  // 移動邏輯
   if (moving) {
     let player = players[currentPlayer];
     
@@ -87,7 +88,6 @@ function draw() {
       moveIndex = (moveIndex + 1) % path.length;
       player.index = moveIndex;
       player.moveStartTime = millis();
-
       moveSteps--;
       if (moveSteps <= 0) {
         moving = false;
@@ -96,19 +96,18 @@ function draw() {
     }
   }
 
-  // 顯示當前玩家資訊
+  // 顯示當前玩家回合
   fill(0);
-  textSize(20);
+  textSize(windowWidth * 0.05);
   textAlign(LEFT, TOP);
-  text(`現在輪到玩家 ${currentPlayer + 1}`, 20, 20);
+  text(`Now it's player ${currentPlayer + 1}'s turn`, 20, 20);
   
-  // 顯示正在移動的玩家小球
   let currentPlayerColor = players[currentPlayer].color;
   fill(currentPlayerColor);
   noStroke();
   ellipse(width / 2, 50, 30, 30);
   
-  // 擲骰動畫
+  // 顯示骰子動畫
   if (rolling) {
     let elapsed = millis() - rollStartTime;
     if (elapsed < rollDuration) {
@@ -118,11 +117,9 @@ function draw() {
     }
   }
   
-  // 顯示骰子
-  drawDice(width / 2, height - 150, diceRoll);
+  drawDice(width / 2, height / 2, diceRoll);
 }
 
-// 計算外圍移動路徑（順時針）
 function calculatePath() {
   for (let i = 0; i < cols; i++) path.push({ x: marginX + i * cellSize, y: marginY });
   for (let i = 1; i < rows; i++) path.push({ x: marginX + (cols - 1) * cellSize, y: marginY + i * cellSize });
@@ -130,7 +127,6 @@ function calculatePath() {
   for (let i = rows - 2; i > 0; i--) path.push({ x: marginX, y: marginY + i * cellSize });
 }
 
-// 畫骰子
 function drawDice(x, y, number) {
   fill(255);
   stroke(0);
@@ -145,22 +141,11 @@ function drawDice(x, y, number) {
   text(number, x, y);
 }
 
-// 按下擲骰按鈕觸發
-function rollDice() {
+function mousePressed() {
   if (!rolling && !moving) {
     rolling = true;
     rollStartTime = millis();
-
-    // 呼叫後端 GameServlet 的 "start" action
-    fetch('/game?action=start')
-      .then(response => response.json())
-      .then(data => {
-        console.log(data.message); // 顯示遊戲初始化消息
-      })
-      .catch(error => {
-        console.error('Error:', error);
-      });
-
+    
     setTimeout(() => {
       let finalRoll = floor(random(1, 7));
       diceRoll = finalRoll;
@@ -170,11 +155,18 @@ function rollDice() {
       players[currentPlayer].moveStartTime = millis();
     }, rollDuration);
   }
+
+  if (!bgmStarted) {
+    userStartAudio();
+    bgm.loop();
+    bgmStarted = true;
+  }
 }
 
-// 顯示/隱藏位置功能仍保留
-function keyPressed() {
-  if (key === 'q' || key === 'Q') {
-    showPosition = !showPosition;
-  }
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  gridSize = min(width, height) * 0.8;
+  cellSize = gridSize / max(rows, cols);
+  marginX = (width - gridSize) / 2;
+  marginY = (height - gridSize) / 2;
 }
